@@ -1,0 +1,358 @@
+*---------------------------------------------------------*
+*                                                         *
+*                                         Annee 2019/2020 * 
+*                                                         *
+*        	Post-flambage poutre biarticulee              *
+*                                                         *
+*                   HA MINH C. (GUIDAULT P.A.)            *
+*                                                         *
+*---------------------------------------------------------*
+
+*----------------------------------------------------------------------
+*********************
+* OPTIONS DE CALCUL *
+*********************
+
+*opti trac psc;
+*opti ftra 'output.ps';
+
+* Dimension du probleme (dimension 3)
+*************************************
+OPTIO DIME 2 ELEM SEG2 ;
+OPTIO EPSI LINEAIRE ;
+*GRAPH ='N'; 
+
+* Titre de l'etude
+******************
+TITRE ' POST-FLAMBAGE DE POUTRE ARTICULEE ' ;
+
+
+*----------------------------------------------------------------------
+***********************
+* DONNEES DU PROBLEME *
+***********************
+
+* Definition de la geometrie
+****************************
+
+* Nombre d elements
+NELE1 = 40;
+LONG1 = 410.5;
+
+P1 = 0. 0.;
+P2 = LONG1 0.;
+
+L1 = D NELE1 P1 P2;
+
+* Maillage
+M1 = L1;
+
+* Caracterisitiques du materiau (module de Young, coeff. de Poisson)
+***********************************************************************
+YOUNG1 = 210000. ;
+NU1 = 0.3 ;
+
+
+*---------------------------------------------------------------------
+****************************************************
+* MISE EN PLACE ET RESOLUTION DU PB ELEMENTS FINIS *
+****************************************************
+
+* Definition du modele 
+**********************
+MODL1 = MODE M1 'MECANIQUE' 'ELASTIQUE' 'ISOTROPE' POUT ;
+
+
+* Definition du materiau
+************************
+
+EPAI1 = 2.1;
+LARG1 = 30.6;
+AIRE1 = EPAI1*LARG1;
+INER1 = (LARG1*(EPAI1**3))/12.; 
+
+
+MATE1 = MATE MODL1 YOUNG YOUNG1 NU NU1 ;
+CAR1 = CARA MODL1 'SECT' AIRE1 'INRZ' INER1 ;
+MATE1 = MATE1 ET CAR1 ;
+
+
+* Conditions limite en deplacement
+**********************************
+CL1 = BLOQUE P1  'DEPL';
+CL2 = BLOQUE P2  'UY';
+Fd1 = -1.;
+F1 = FORCE FX Fd1 P2 ;
+
+* Calcul de la matrice de rigidite
+**********************************
+RIG1 = RIGIDITE MODL1 MATE1 ;
+BLO1 = CL1 ET CL2;
+RIGTOT1 = RIG1 ET BLO1;
+
+
+* Resolution du systeme lineaire
+********************************
+DEP1 = RESO RIGTOT1 F1 ;
+
+
+*-------------------------------------------------------------------
+*******************************
+* VISUALISATION DES RESULTATS *
+*******************************
+
+* Visualisation de la structure deformee
+****************************************
+ampl1 = 100000.;
+DEF0 = DEFORME M1 DEP1 0. JAUNE ;
+DEF1 = DEFORME M1 DEP1 ampl1 ROUGE ;
+*TRACER (DEF0 et DEF1);
+TITRE TITRE1 'DEFORMEE' ;
+
+
+* Transformation du champ de deplacement en champ de precontraintes
+****************************************************************
+SIGP1 = SIGMA MODL1 MATE1 DEP1 ;
+*TRACER DEF1 SIGP1 MODL1 MATE1;
+
+
+*-------------------------------------------------------------------
+*******************************
+*        FLAMBAGE             *
+*******************************
+
+
+* Titre de l'etude
+******************
+TITRE 'ETUDE DES MODES DE FLAMBAGE' ;
+
+
+* Calcul de la matrice de rigidite geometrique
+**********************************************
+KSIG1 = KSIGMA MODL1 SIGP1 CAR1 'FLAM';
+
+* Calcul des modes de flambage
+******************************
+* nombre de modes
+nmod1 = 4;
+
+
+TAB1 = TABLE ;
+TAB1 . 'OBJM' = MODL1;
+TAB1 . 'NMOD' = nmod1 ;
+TAB1 . 'CLIM' = BLO1 ;
+TAB1 . 'RIGI' = RIGTOT1;
+TAB1. 'KSIG' = KSIG1;
+
+
+TAB2 = FLAMBAGE TAB1 ;
+
+
+* Dessin du mode de flambage
+****************************
+
+ampl2 = 10.;
+
+SI (NEG GRAPH 'N');
+
+imod1 = 0;
+
+REPE BOUC2 nmod1;
+
+imod1 = imod1 + 1;
+FLAM1 = TAB2 . imod1 . DEPL ;
+DEFO1 = DEFO FLAM1 M1 ampl2 ROUGE ;
+DEFO0 = DEFO FLAM1 M1 0. VERT ;
+*TRACER (DEFO0 et DEFO1);
+FIN BOUC2;
+
+FINSI;
+
+LAMB1  =  (TAB2 . 1) . LAMB ;
+Fcrit1 = (LAMB1 * Fd1);
+MESS 'Premiere charge critique'  Fcrit1 ;
+
+
+*-------------------------------------------------------------------
+********************************************
+*     CALCUL NL SUR GEOMETRIE PERTURBEE    *
+********************************************
+
+* Titre de l'etude
+******************
+TITRE 'ETUDE DE POST-FLAMBAGE' ;
+
+
+
+* Perturbation du maillage sur le mode nbmode1
+**********************************************
+
+* On perturbe sur le mode nbmode1
+nbmode1 = 1;
+* amplitude du defaut : 1 dixieme de la valeur maxi du mode
+*epsi1 = 0.;
+*epsi1 = 0.1;
+epsi1 = 0.3;
+*epsi1 = 0.776958291;
+
+pertub1 = epsi1*(TAB2 . nbmode1 . DEPL) 
+/ (maxi (EXCO (MOTS UX UY) (TAB2 . nbmode1 . DEPL)));
+
+* On perturbe sur une combinaison des 4 premiers modes contenus dans tab2;
+*pertub1 = COLI (TAB2 . 1 . DEPL) 1.
+*             (TAB2 . 2 . DEPL) 0.1
+*             (TAB2 . 3 . DEPL) 0.01
+*             (TAB2 . 4 . DEPL) 0.001;
+
+* On deplace les noeuds de la geometrie initiale
+M1b = M1 PLUS pertub1;
+P1b = M1b POIN 'PROC' P1;
+P2b = M1b POIN 'PROC' P2;
+
+MODL1b= MODE M1b 'MECANIQUE' 'ELASTIQUE' 'ISOTROPE' POUT ;
+MATE1b = MATE MODL1b YOUNG YOUNG1 NU NU1 ;
+CAR1b = CARA MODL1b 'SECT' AIRE1 'INRZ' INER1 ;
+MATE1b = MATE1b ET CAR1b ;
+
+CL1b = BLOQUE P1b  'DEPL';
+CL2b = BLOQUE P2b  'UY';
+F1b = FORCE FX Fd1 P2b ;
+
+BLO1b = CL1b ET CL2b;
+ 
+
+
+
+*-------------------------------------------------------------------
+***********************************
+* CALCUL NON-LINEAIRE GEOMETRIQUE *
+***********************************
+
+* Titre de l'etude
+******************
+TITRE 'ETUDE DE POST-FLAMBAGE' ;
+
+
+*---- PREPARATION DE LA TABLE POUR NONLIN
+*
+*  OBJET CHARGEMENT 
+*
+* liste des coefficients multiplicateurs du chargement
+LI21 = PROG 0. PAS 0.01 0.8;
+LI22 = PROG 0.81 PAS 0.005 1.;
+*LI23 = PROG 1.005 PAS 0.01 1.2;
+*LI2 = LI21 ET LI22 ET LI23;
+LI2 = LI21 ET LI22;
+
+* liste des pseudo-temps
+nbpas0 = ((DIME LI2 - 1));
+pas0 = 1. / nbpas0;
+LI1 = PROG 0. PAS 1. nbpas0;
+
+* evolution du facteur multiplicatif en fonction de temps
+EV1 = EVOL MANU T LI1 F(T) LI2 ;
+Fd1b = LAMB1 * F1b;
+CHA1b = CHAR  'MECA' Fd1b  EV1 ;
+*CHA1b = CHAR  'DIMP' Fd1b  EV1 ;
+
+DESS (EV1 * lamb1);
+
+
+*---------------------------------------------
+*RESOLUTION EN NL GEOM effort
+*---------------------------------------------
+
+* Liste des pas de temps sauves
+*LIS1B = PROG 1.;
+
+* Liste des pas de temps calcules
+*LI1 = PROG 0. 68.;
+
+TAB3 = TABLE;
+TAB3.'GRANDS_DEPLACEMENTS' = VRAI ;
+*TAB3.'GRANDES_ROTATIONS' = VRAI ;
+*TAB3.'GRANDES_DEFORMATIONS' = VRAI ;
+TAB3.'AUTOMATIQUE' = VRAI ;
+TAB3.'AUTOCRIT' = 0.01  ;
+*TAB3.'MAXITERATION'= 100 ;
+TAB3.'AUTOPAS' = 1000 ;
+TAB2.'AUTORESU' = 1;
+TAB3.'BLOCAGES_MECANIQUES' = BLO1b;
+TAB3.'MODELE' = MODL1b;
+TAB3.'CARACTERISTIQUES' = MATE1b;
+TAB3.'CHARGEMENT' = CHA1b;
+TAB3.'TEMPS_CALCULES' = LI1;
+*TAB3.'ECONOMIQUE' = FAUX;
+*TAB3.'TEMPS_SAUVES' = LIS1B;
+
+PASAPAS TAB3 ;
+
+* Dessin de la deformee a chaque pas
+****************************
+TAB4 = TAB3.DEPLACEMENTS ;
+*EXPLORER TAB3;
+
+SI (NEG GRAPH 'N');
+            
+ipas1 = 0;
+ampl1 = 1.;
+
+
+REPE BOUC1 ((dime tab4));
+DEP1 = TAB4 . ipas1 ;
+DEFO1 = DEFO DEP1 M1b  ampl1 ROUGE ;
+DEFO0 = DEFO DEP1 M1b 0. VERT ;
+TRAC 'NCLK' (DEFO1 ET DEFO0);
+*TRAC (DEFO1 ET DEFO0);
+
+ipas1 = ipas1 + 1;
+
+FIN BOUC1;
+
+FINSI;
+
+
+* Courbe d equilibre
+****************************
+                                                                 
+
+PGUX1 = PROG 0.00;
+PGFX1 = PROG 0.00;
+
+NDIM = (DIME ( TAB3 . DEPLACEMENTS )) - 1 ;
+
+REPETER TBOU2 NDIM ;
+
+* champ de deplacement
+LEDEP = TAB4 .  (&TBOU2);
+
+* extraction du deplacement suivant x en P2b
+*UX1   = EXTR LEDEP UX P2b ;
+
+* extraction de la fleche maximale suivant y
+UX1 = maxi (ABS (EXCO (MOTS UY) LEDEP));
+
+PGUX1 = PGUX1 ET ( PROG (UX1 / LONG1) ) ;
+
+* effort de reaction qui travaille avec CL1b
+REA1 = REAC CL1b LEDEP ;
+VV  = EXTR REA1  FX P1b ;
+PGFX1 = PGFX1 ET ( PROG (VV / (-1*fcrit1)) ) ;
+
+FIN TBOU2 ;
+
+* Courbe d equilibre
+EV2b = EVOL ROUGE MANU  'U sur L' PGUX1 'F sur Fc' PGFX1 ;
+DESS EV2b;
+
+* Courbe de Southwell
+SOUTH1 = EVOL ROUGE MANU  'U' (PGUX1 * LONG1) 
+'U sur F' ((PGUX1 * Long1) / (PGFX1 * (ABS Fcrit1)));
+
+DESS SOUTH1;
+
+*export vers Excel
+@EXCEL1 ev2b courbe_equi1; 
+@EXCEL1 south1 courbe_south1; 
+
+
